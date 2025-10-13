@@ -1,0 +1,19 @@
+{
+  "name": "AI_Investor_System (Dev)",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "astral-sh.ruff",
+        "ms-toolsai.jupyter",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "PYTHONPATH": "/workspace/src"
+  }
+}

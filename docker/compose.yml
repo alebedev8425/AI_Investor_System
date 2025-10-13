@@ -1,0 +1,17 @@
+services:
+  system:
+    build:
+      context: ..                 # repo root
+      dockerfile: docker/Dockerfile
+    image: aiis:runtime           # local image tag
+    working_dir: /app
+    environment:
+      PYTHONPATH: /app/src
+    env_file:
+      - ../.env                   
+    volumes:
+      - ../src:/app/src:rw
+      - ../experiments:/app/experiments:rw
+      - ../data:/app/data:rw
+      - ../outputs:/app/outputs:rw
+    command: ["python", "-c", "print('AI_Investor_System container OK')"]
