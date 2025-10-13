@@ -1,0 +1,8 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "install:base", "type": "shell", "command": "python -m pip install -r requirements/base.txt -r requirements/developer.txt" },
+    { "label": "lint", "type": "shell", "command": "ruff check src && black --check src && mypy src" },
+    { "label": "test", "type": "shell", "command": "pytest -q" }
+  ]
+}

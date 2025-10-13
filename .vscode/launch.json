@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run experiment",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "aiis.cli",
+      "args": ["run", "--config", "experiments/exp_baseline.yaml"],
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    }
+  ]
+}

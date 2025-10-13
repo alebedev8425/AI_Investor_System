@@ -1,0 +1,13 @@
+pandas>=2.2
+numpy>=1.26
+pyyaml>=6.0
+pydantic>=2.7
+typer[all]>=0.12
+python-dateutil>=2.9
+exchange-calendars>=4.5
+pyarrow>=17.0
+rich>=13.7
+tqdm>=4.66
+matplotlib>=3.9
+scipy>=1.13
+networkx>=3.3
