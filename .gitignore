@@ -1,13 +1,29 @@
-__pycache__/
-*.pyc
+# env
 .venv/
 .env
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-outputs/*
-!outputs/.gitkeep
-outputs/_index.jsonl
-.ipynb_checkpoints/
-.vscode/*.cache
+*.env
+
+# python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# platform
+.DS_Store
+
+# artifacts & caches
+artifacts/
+artifacts/_shared_cache/
+**/_shared_cache/
+logs/
+reports/*.pdf
+
+# models/checkpoints
+*.pt
+*.pth
+*.ckpt
+*.pkl
+
+# ad-hoc experiment files
+experiments/gui_*.yaml

@@ -1,14 +1,13 @@
-# baseline config (to be filled)
 experiment:
-  name: "Baseline LSTM PriceOnly"
+  name: "phase1_baseline"
   artifacts_root: "artifacts"
 
 universe:
-  tickers: ["AAPL", "MSFT", "NVDA"]
+  tickers: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"]
 
 dates:
   start: "2019-01-01"
-  end:   "2022-12-31"
+  end: "2021-12-31"
 
 pipelines:
   ingest_prices: true
@@ -27,15 +26,15 @@ pipelines:
 
 model:
   type: "lstm"
-  window: 30         # lookback days
+  window: 30
   hidden: 64
-  epochs: 5
+  epochs: 8
   lr: 0.001
 
 allocator:
   type: "softmax"
-  temperature: 10.0
-  weight_cap: 0.10
+  temperature: 0.5
+  weight_cap: 0.6
 
 backtest:
   rebalance: "weekly"
@@ -43,7 +42,7 @@ backtest:
   long_only: true
 
 seeds:
-  python: 42
-  numpy: 42
-  torch: 42
+  python: 123
+  numpy: 123
+  torch: 123
   deterministic_torch: false
