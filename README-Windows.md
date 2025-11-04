@@ -29,8 +29,14 @@ This guide walks you from a blank Windows machine to running the GUI and CLI, ge
   • Make sure your GPU and driver support the chosen CUDA toolkit.
   • You can install a CUDA-enabled PyTorch wheel later (below). If unsure, use CPU first.
 
-=============================================================================== 2) Clone the Repository
+=============================================================================== 
+2) Clone the Repository
 ===============================================================================
+I recommend using VS code for simplicity.
+Download VS code from this link: https://code.visualstudio.com/download
+
+Now, open vscode, and click the 2nd icon from the right, in the top right hand corner to open the terminal.
+
 Open Command Prompt (or PowerShell), then:
 git clone https://github.com/<your-username>/<your-repo>.git
 cd <your-repo>
@@ -38,7 +44,8 @@ cd <your-repo>
 Tip: If your path contains spaces, quoting is fine:
 cd "C:\Users\<you>\Documents\AI_Investor_System Research\AI_Investor_System"
 
-=============================================================================== 3) Create and Activate a Virtual Environment
+=============================================================================== 
+3) Create and Activate a Virtual Environment
 ===============================================================================
 Command Prompt:
 py -3.11 -m venv .venv
@@ -55,7 +62,8 @@ pip --version
 Upgrade packaging tools:
 python -m pip install --upgrade pip setuptools wheel
 
-=============================================================================== 4) Install Dependencies
+=============================================================================== 
+4) Install Dependencies
 ===============================================================================
 Run:
 pip install -r requirements/base.txt
@@ -73,7 +81,8 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 Note: If you see SSL issues, ensure your system certificates are up to date and consider:
 python -m pip install --upgrade certifi
 
-=============================================================================== 5) Project Structure (What You Should Expect)
+=============================================================================== 
+5) Project Structure (What You Should Expect)
 ===============================================================================
 • experiments/ (YAML configs, e.g. exp_tech_lstm_softmax.yaml)
 • src/system/... (GUI, CLI, report builders, controllers)
@@ -82,7 +91,8 @@ python -m pip install --upgrade certifi
 
 You may see a folder name with a space in your user path (e.g., "AI_Investor_System Research"). This is fine; commands still work, but you may need to quote paths if typing manually.
 
-=============================================================================== 6) Configure the GUI Combo → YAML Mapping
+=============================================================================== 
+6) Configure the GUI Combo → YAML Mapping
 ===============================================================================
 In file: src/system/View/gui.py
 There is a CONFIG_MAP dictionary mapping GUI selections to YAML files in experiments/. Make sure the combination you choose in the GUI exists in CONFIG_MAP and the YAML file exists in experiments/. For example:
@@ -90,7 +100,8 @@ There is a CONFIG_MAP dictionary mapping GUI selections to YAML files in experim
 
 If you add more YAMLs, add their combos to CONFIG_MAP accordingly.
 
-=============================================================================== 7) Launch the GUI
+=============================================================================== 
+7) Launch the GUI
 ===============================================================================
 Using Command Prompt or PowerShell from the repo root (MAKE SURE VENV IS ACTIVATED):
 set PYTHONPATH=src && python -m system.View.gui
@@ -107,7 +118,8 @@ artifacts/\_comparisons/<A>\_vs*<B>/compare.html
 Tips:
 • If compare doesn’t show immediately, click Build compare again or re-open. This is often just viewer caching. The system writes the correct compare.html in the \_comparisons folder.
 
-=============================================================================== 8) Run the CLI (Optional, No GUI)
+=============================================================================== 
+8) Run the CLI (Optional, No GUI)
 ===============================================================================
 Run a single experiment:
 set PYTHONPATH=src && python -m system.View.cli run --config experiments\exp_tech_lstm_softmax.yaml
@@ -117,7 +129,8 @@ set PYTHONPATH=src && python -m system.View.cli compare --a 20251104_214520_phas
 
 Open the resulting HTML (double-click in File Explorer or load it in the GUI compare tab).
 
-=============================================================================== 9) Outputs & Where to Find Them
+=============================================================================== 
+9) Outputs & Where to Find Them
 ===============================================================================
 Per-run outputs (created automatically):
 artifacts/<run_id>/manifest.json
@@ -131,7 +144,8 @@ artifacts/_comparisons/<A>\_vs_<B>/compare.html
 artifacts/_comparisons/<A>\_vs_<B>/assets/equity*compare.png
 artifacts/\_comparisons/<A>\_vs*<B>/assets/drawdown_compare.png
 
-=============================================================================== 10) Troubleshooting & Tips
+=============================================================================== 
+10) Troubleshooting & Tips
 ===============================================================================
 • “No config for combo” in GUI:
 
