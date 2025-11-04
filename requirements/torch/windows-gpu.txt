@@ -1,0 +1,4 @@
+# Use only on a CUDA 12.1 machine with matching NVIDIA drivers.
+--index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1
+torchvision==0.20.1

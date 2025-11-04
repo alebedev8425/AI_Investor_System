@@ -16,6 +16,7 @@ from system.Controller.allocation_manager import AllocationManager
 from system.Model.backtesting.backtester import Backtester
 from system.Model.data.trading_calendar import TradingCalendar
 from system.Controller.cache_manager import CacheManager
+from system.Controller.reporting_manager import ReportingManager
 
 
 class RunManager:
@@ -38,6 +39,7 @@ class RunManager:
         allocation_manager: AllocationManager,
         backtester: Backtester,
         cache: CacheManager,
+        reporting: ReportingManager,
         calendar: Optional[TradingCalendar] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
@@ -49,6 +51,7 @@ class RunManager:
         self._allocator = allocation_manager
         self._backtester = backtester
         self._cache = cache
+        self._reporting = reporting
         self._cal = calendar
         self._log = logger or logging.getLogger(__name__)
 
@@ -100,23 +103,37 @@ class RunManager:
             returns = self._compute_returns_for_backtest(prices)
             daily, metrics = self._backtester.run(weights=weights, returns=returns)
 
-            # persist results
-            self._store.save_csv(daily, self._store.backtest_returns_path(), index=False)
+            # (A) normalized portfolio daily returns for reporting: ['date','ret']
+            daily_out = daily[["date", "port_ret"]].rename(columns={"port_ret": "ret"})
+            self._store.save_csv(daily_out, self._store.backtest_returns_path(), index=False)
+
+            # (B) optional: keep the richer daily frame too (turnover/TC etc.)
+            self._store.save_csv(
+                daily, self._store.backtest_returns_path("daily_portfolio.csv"), index=False
+            )
+
+            # metrics (now includes n_days in Backtester)
             self._store.save_json(metrics, self._store.backtest_metrics_path())
+
             self._log.info(
                 "Backtest complete. Days=%d  Sharpe~=%.3f  CumRet=%.2f%%",
-                len(daily),
+                metrics.get("n_days", len(daily_out)),
                 metrics.get("sharpe_like", 0.0),
                 100.0 * metrics.get("cumulative_return", 0.0),
             )
         else:
             self._log.info("Backtest step skipped by configuration.")
 
-        # 6) Report (Phase-1 optional; stub for future)
-        if getattr(self._cfg.pipelines, "report", False):
-            self._log.info("Report generation is not implemented in Phase-1.")
-        if getattr(self._cfg.pipelines, "compare", False):
-            self._log.info("Experiment comparison is not implemented in Phase-1.")
+        # after backtest
+        if getattr(self._cfg.pipelines, "report", False) and self._reporting:
+            out = self._reporting.build_single()
+            self._log.info("Report written: %s", out)
+
+        if getattr(self._cfg.pipelines, "compare", False) and self._reporting:
+            baseline = getattr(getattr(self._cfg, "compare", None), "baseline_run_id", None)
+            if baseline:
+                out = self._reporting.build_compare(baseline, self._store.run_id)
+                self._log.info("Comparison report written: %s", out)
 
     # ---------- helpers ----------
 

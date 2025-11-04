@@ -1,0 +1,4 @@
+# This file is applied in its own pip call so the index only affects this step.
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+torchvision==0.20.1

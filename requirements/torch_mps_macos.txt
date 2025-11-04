@@ -1,3 +1,0 @@
-torch>=2.3; platform_system=="Darwin"
-torchvision>=0.18; platform_system=="Darwin"
-torch-geometric>=2.5

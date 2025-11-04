@@ -15,6 +15,8 @@ from system.Model.data.trading_calendar import TradingCalendar
 from system.Model.data.data_validator import DataValidator
 from system.Model.features.technical_features import TechnicalFeatureBuilder
 from system.Model.backtesting.backtester import Backtester
+from system.Controller.reporting_manager import ReportingManager
+
 
 # --- Controller imports ---
 from system.Controller.price_manager import PriceManager
@@ -22,6 +24,9 @@ from system.Controller.feature_pipeline import FeaturePipeline
 from system.Controller.training_manager import TrainingManager
 from system.Controller.allocation_manager import AllocationManager
 from system.Controller.run_manager import RunManager
+
+# --- Utility imports ---
+from system.Model.utils.repro import configure_reproducibility
 
 
 def _build_services(cfg: ExperimentConfig) -> tuple[RunManager, ArtifactStore]:
@@ -46,6 +51,7 @@ def _build_services(cfg: ExperimentConfig) -> tuple[RunManager, ArtifactStore]:
         transaction_cost_bps=cfg.backtest.transaction_cost_bps,
         long_only=cfg.backtest.long_only,
     )
+    reporting_mgr = ReportingManager(store=store)
 
     runner = RunManager(
         cfg=cfg,
@@ -57,12 +63,27 @@ def _build_services(cfg: ExperimentConfig) -> tuple[RunManager, ArtifactStore]:
         backtester=backtester,
         cache=cache,
         calendar=calendar,
+        reporting=reporting_mgr,
     )
     return runner, store
 
 
 def cmd_run(args: argparse.Namespace) -> None:
     cfg = ExperimentConfig.from_yaml(Path(args.config))
+
+    device = configure_reproducibility(
+        seed_python=cfg.seeds.python,
+        seed_numpy=cfg.seeds.numpy,
+        seed_torch=cfg.seeds.torch,
+        device_pref=None,  # let env AI_INV_DEVICE choose, else auto
+        strict=None,  # let env AI_INV_STRICT choose
+    )
+
+    logging.getLogger(__name__).info(
+        f"[repro] device={device} | "
+        f"seeds(py={cfg.seeds.python}, np={cfg.seeds.numpy}, torch={cfg.seeds.torch})"
+    )
+
     runner, _ = _build_services(cfg)
     runner.run()  # orchestrates Phase-1: prices -> tech features -> LSTM -> softmax -> backtest
 
@@ -129,31 +150,32 @@ def cmd_clean_cache(args: argparse.Namespace) -> None:
         print(f"[warn] Could not clear technical features: {e}")
 
 
-def cmd_prices(args):
-    cfg = ExperimentConfig.from_yaml(Path(args.config))
-    store = ArtifactStore()  # uses your defaults; adjust if you store paths in cfg
-    pm = PriceManager(store)
-    # TODO: replace with your actual API if different
-    # Many implementations expose a single 'run' or 'fetch_and_cache' method.
-    if hasattr(pm, "run"):
-        pm.run(cfg)
-    elif hasattr(pm, "fetch_and_cache"):
-        pm.fetch_and_cache(cfg)
-    else:
-        raise RuntimeError("PriceManager missing expected run()/fetch_and_cache() method")
+def cmd_report(args: argparse.Namespace) -> None:
+    root = Path(args.artifacts_root) if args.artifacts_root else Path("artifacts")
+    store = ArtifactStore(root, create=True)
+    run_id = args.run_id or store.latest_run()
+    if not run_id:
+        print("No runs available.")
+        return
+    store.ensure_existing_run(run_id)
+    rm = ReportingManager(store)
+    out = rm.build_single()
+    print(str(out))
 
 
-def cmd_features(args):
-    cfg = ExperimentConfig.from_yaml(Path(args.config))
-    store = ArtifactStore()
-    fp = FeaturePipeline(store)
-    # TODO: replace with your actual API if different
-    if hasattr(fp, "build_technical"):
-        fp.build_technical(cfg)
-    else:
-        raise RuntimeError(
-            "FeaturePipeline missing expected run()/build_from_cached_prices() method"
-        )
+def cmd_compare(args: argparse.Namespace) -> None:
+    root = Path(args.artifacts_root) if args.artifacts_root else Path("artifacts")
+    store = ArtifactStore(root, create=True)
+    a = args.a
+    b = args.b
+    if not a or not b:
+        print("compare requires --a RUN_ID_A and --b RUN_ID_B")
+        return
+    rm = ReportingManager(store)  # uses store.run_id for output location
+    # choose which run folder to host the compare report; here we use 'b' by convention
+    store.ensure_existing_run(b)
+    out = rm.build_compare(a, b)
+    print(str(out))
 
 
 def main() -> None:
@@ -191,6 +213,17 @@ def main() -> None:
     p_clean.add_argument("--artifacts-root", type=Path, default=None)
     p_clean.add_argument("--run-id", type=str, default=None)
     p_clean.set_defaults(func=cmd_clean_cache)
+
+    p_rep = sub.add_parser("report", help="Build HTML report for a run (default: latest)")
+    p_rep.add_argument("--artifacts-root", type=Path, default=None)
+    p_rep.add_argument("--run-id", type=str, default=None)
+    p_rep.set_defaults(func=cmd_report)
+
+    p_cmp = sub.add_parser("compare", help="Build comparison HTML for two runs")
+    p_cmp.add_argument("--artifacts-root", type=Path, default=None)
+    p_cmp.add_argument("--a", type=str, required=True)
+    p_cmp.add_argument("--b", type=str, required=True)
+    p_cmp.set_defaults(func=cmd_compare)
 
     args = ap.parse_args()
     args.func(args)

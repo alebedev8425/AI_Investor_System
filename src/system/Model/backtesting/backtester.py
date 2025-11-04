@@ -5,6 +5,7 @@ from typing import Tuple, Dict
 import numpy as np
 import pandas as pd
 
+
 class Backtester:
     """
     Phase-1, file-backed research backtester.
@@ -19,8 +20,8 @@ class Backtester:
 
     def run(
         self,
-        weights: pd.DataFrame,   # columns: ['date','ticker','weight']
-        returns: pd.DataFrame,   # columns: ['date','ticker','ret']
+        weights: pd.DataFrame,  # columns: ['date','ticker','weight']
+        returns: pd.DataFrame,  # columns: ['date','ticker','ret']
     ) -> Tuple[pd.DataFrame, Dict[str, float]]:
         # Basic sanitation
         w = weights.copy()
@@ -39,16 +40,9 @@ class Backtester:
 
         # expand rebalance weights forward to daily using the returns' dates
         all_days = r["date"].drop_duplicates().sort_values()
-        wide = (
-            w.set_index(["date", "ticker"])["weight"]
-             .unstack("ticker")
-             .reindex(all_days)
-             .ffill()
-        )
+        wide = w.set_index(["date", "ticker"])["weight"].unstack("ticker").reindex(all_days).ffill()
         expanded = (
-            wide.stack()
-                .rename("weight")
-                .reset_index()  # back to ['date','ticker','weight']
+            wide.stack().rename("weight").reset_index()  # back to ['date','ticker','weight']
         )
 
         # merge with returns, fill missing returns with 0
@@ -61,12 +55,14 @@ class Backtester:
         merged["tc"] = merged["turnover"] * (self.tc_bps / 10000.0)
 
         # aggregate to daily portfolio P&L
-        daily = merged.assign(
-            contrib=lambda df: df["weight"] * df["ret"] - df["tc"]
-        ).groupby("date", as_index=False).agg(
-            port_ret=("contrib", "sum"),
-            gross_turnover=("turnover", "sum"),
-            tc=("tc", "sum"),
+        daily = (
+            merged.assign(contrib=lambda df: df["weight"] * df["ret"] - df["tc"])
+            .groupby("date", as_index=False)
+            .agg(
+                port_ret=("contrib", "sum"),
+                gross_turnover=("turnover", "sum"),
+                tc=("tc", "sum"),
+            )
         )
 
         # simple metrics
@@ -78,13 +74,16 @@ class Backtester:
                 "avg_daily_turnover": 0.0,
                 "transaction_cost_bps": float(self.tc_bps),
                 "long_only": bool(self.long_only),
+                "n_days": 0,
             }
             return daily, metrics
 
         equity = (1.0 + daily["port_ret"]).cumprod()
         drawdown = equity / equity.cummax() - 1.0
         std = float(daily["port_ret"].std())
-        sharpe_like = float(daily["port_ret"].mean() / (std + 1e-12) * np.sqrt(252)) if std > 0 else 0.0
+        sharpe_like = (
+            float(daily["port_ret"].mean() / (std + 1e-12) * np.sqrt(252)) if std > 0 else 0.0
+        )
 
         metrics = {
             "cumulative_return": float(equity.iloc[-1] - 1.0),
@@ -93,5 +92,6 @@ class Backtester:
             "avg_daily_turnover": float(daily["gross_turnover"].mean()),
             "transaction_cost_bps": float(self.tc_bps),
             "long_only": bool(self.long_only),
+            "n_days": int(len(daily)),
         }
         return daily, metrics

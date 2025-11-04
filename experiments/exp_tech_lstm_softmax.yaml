@@ -21,7 +21,7 @@ pipelines:
   train_model: true
   allocate: true
   backtest: true
-  report: false
+  report: true
   compare: false
 
 model:

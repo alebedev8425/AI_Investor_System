@@ -182,6 +182,7 @@ class ArtifactStore:
 
     # ----- Input/Output helpers  -----
 
+    @staticmethod
     def _json_default(o):
         from pathlib import Path
         from datetime import date, datetime
@@ -221,7 +222,7 @@ class ArtifactStore:
             raise RuntimeError("pandas is required for save_csv/load_csv. Please install pandas.")
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        df.to_csv(tmp, index=index)
+        df.to_csv(tmp, index=index, float_format="%.12g", date_format="%Y-%m-%d")
         os.replace(tmp, path)
 
     def load_csv(self, path: Path):
@@ -353,3 +354,31 @@ class ArtifactStore:
 
     def write_run_meta(self, section: str, meta: dict) -> None:
         self.save_json(meta, self.run_meta_path(section))
+
+    def report_html_path(self, name: str = "report.html") -> Path:
+        return self.reports_dir / name
+
+    def report_assets_dir(self, name: str = "assets") -> Path:
+        p = self.reports_dir / name
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # --- cross-run comparison outputs ---
+    @property
+    def compare_root(self) -> Path:
+        p = self.root / "_comparisons"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def compare_dir(self, tag: str) -> Path:
+        p = self.compare_root / tag
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def compare_html_path(self, tag: str, name: str = "compare.html") -> Path:
+        return self.compare_dir(tag) / name
+
+    def compare_assets_dir(self, tag: str, name: str = "assets") -> Path:
+        p = self.compare_dir(tag) / name
+        p.mkdir(parents=True, exist_ok=True)
+        return p
