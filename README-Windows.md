@@ -126,7 +126,7 @@ Per-run outputs (created automatically):
 artifacts/<run_id>/manifest.json
 artifacts/<run_id>/backtests/daily_returns.csv
 artifacts/<run_id>/backtests/metrics.json
-artifacts/<run_id>/reports/assets/\*.png
+artifacts/<run_id>/reports/assets/*.png
 artifacts/<run_id>/reports/report.html
 
 Comparisons:
