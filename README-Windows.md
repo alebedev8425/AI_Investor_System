@@ -1,9 +1,7 @@
 # AI_Investor_System — Windows Setup & Usage (Python 3.11)
 
 This guide walks you from a blank Windows machine to running the GUI and CLI, generating reports, and building comparisons.
-
 ===============================================================================
-
 1. # Install Prerequisites
    • Python 3.11 (64-bit) from python.org
 
@@ -28,7 +26,6 @@ This guide walks you from a blank Windows machine to running the GUI and CLI, ge
 - If you have an NVIDIA GPU and want CUDA:
   • Make sure your GPU and driver support the chosen CUDA toolkit.
   • You can install a CUDA-enabled PyTorch wheel later (below). If unsure, use CPU first.
-
 =============================================================================== 
 2) Clone the Repository
 ===============================================================================
@@ -37,13 +34,12 @@ Download VS code from this link: https://code.visualstudio.com/download
 
 Now, open vscode, and click the 2nd icon from the right, in the top right hand corner to open the terminal.
 
-Open Command Prompt (or PowerShell), then:
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+In GitHub, copy the HTTPS clone url from the big green CODE button.
+Then in the terminal, type "git clone ", and paste the HTTPS clone url
+Then, cd to the name of the repository cloned
 
 Tip: If your path contains spaces, quoting is fine:
 cd "C:\Users\<you>\Documents\AI_Investor_System Research\AI_Investor_System"
-
 =============================================================================== 
 3) Create and Activate a Virtual Environment
 ===============================================================================
@@ -61,7 +57,6 @@ pip --version
 
 Upgrade packaging tools:
 python -m pip install --upgrade pip setuptools wheel
-
 =============================================================================== 
 4) Install Dependencies
 ===============================================================================
@@ -80,7 +75,6 @@ pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 Note: If you see SSL issues, ensure your system certificates are up to date and consider:
 python -m pip install --upgrade certifi
-
 =============================================================================== 
 5) Project Structure (What You Should Expect)
 ===============================================================================
@@ -90,7 +84,6 @@ python -m pip install --upgrade certifi
 • .gitignore (should exclude artifacts/, venvs, caches, etc.)
 
 You may see a folder name with a space in your user path (e.g., "AI_Investor_System Research"). This is fine; commands still work, but you may need to quote paths if typing manually.
-
 =============================================================================== 
 6) Configure the GUI Combo → YAML Mapping
 ===============================================================================
@@ -99,7 +92,6 @@ There is a CONFIG_MAP dictionary mapping GUI selections to YAML files in experim
 "technical|lstm|softmax": "experiments/exp_tech_lstm_softmax.yaml"
 
 If you add more YAMLs, add their combos to CONFIG_MAP accordingly.
-
 =============================================================================== 
 7) Launch the GUI
 ===============================================================================
@@ -117,7 +109,6 @@ artifacts/\_comparisons/<A>\_vs*<B>/compare.html
 
 Tips:
 • If compare doesn’t show immediately, click Build compare again or re-open. This is often just viewer caching. The system writes the correct compare.html in the \_comparisons folder.
-
 =============================================================================== 
 8) Run the CLI (Optional, No GUI)
 ===============================================================================
@@ -128,7 +119,6 @@ Build a comparison between two runs (use folder names from artifacts/):
 set PYTHONPATH=src && python -m system.View.cli compare --a 20251104_214520_phase1_baseline --b 20251104_214206_phase1_baseline
 
 Open the resulting HTML (double-click in File Explorer or load it in the GUI compare tab).
-
 =============================================================================== 
 9) Outputs & Where to Find Them
 ===============================================================================
@@ -143,7 +133,6 @@ Comparisons:
 artifacts/_comparisons/<A>\_vs_<B>/compare.html
 artifacts/_comparisons/<A>\_vs_<B>/assets/equity*compare.png
 artifacts/\_comparisons/<A>\_vs*<B>/assets/drawdown_compare.png
-
 =============================================================================== 
 10) Troubleshooting & Tips
 ===============================================================================

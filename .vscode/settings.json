@@ -4,5 +4,11 @@
   "python.testing.pytestArgs": ["-q"],
   "editor.formatOnSave": true,
   "ruff.enable": true,
-  "ruff.formatOnSave": true
+  "ruff.formatOnSave": true,
+    // keep format on save for code, but NOT for Markdown
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.wordWrap": "off",
+    "editor.defaultFormatter": "vscode.markdown-language-features"
+  }
 }
