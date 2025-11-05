@@ -15,4 +15,5 @@ yfinance>=0.2.27
 PySide6==6.7.3
 shiboken6==6.7.3
 opencv-python-headless==4.10.*
+pyqtdarktheme==2.1.0
 

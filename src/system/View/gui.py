@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtWidgets
 from PySide6 import QtGui
 from PySide6.QtGui import QShortcut, QKeySequence
+import qdarktheme
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -320,6 +321,7 @@ class MainWin(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+    qdarktheme.setup_theme("dark")
     w = MainWin()
     w.show()
     sys.exit(app.exec())
