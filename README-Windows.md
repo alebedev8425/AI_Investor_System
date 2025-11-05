@@ -44,7 +44,8 @@ Now, open vscode, and click the 2nd icon from the right, in the top right hand c
 
 In GitHub, copy the HTTPS clone url from the big green CODE button.  
 Then in the terminal, type "git clone ", and paste the HTTPS clone url  
-Then, cd to the name of the repository cloned
+Then, cd to the name of the repository cloned, it should be "AI_Investor_System"
+Lastly, when located in the right directory, type "code ." to open the project in a new vs code window.
 
 Tip: If your path contains spaces, quoting is fine:
 ```bat
@@ -54,6 +55,8 @@ cd "C:\Users\<you>\Documents\AI_Investor_System Research\AI_Investor_System"
 ---
 
 ## 3) Create and Activate a Virtual Environment
+
+Again, open the terminal in vs code, then:
 
 **Command Prompt:**
 ```bat
@@ -82,13 +85,17 @@ python -m pip install --upgrade pip setuptools wheel
 
 ## 4) Install Dependencies
 
+(Powershell is what is used if you click the 2nd from right button in top right of vscode)
+
 **Run:**
 ```bat
 pip install -r requirements/base.txt
 pip install -r requirements/torch/windows-cpu.txt
 ```
 
-If not, install the core libraries explicitly (CPU-friendly defaults):
+If for any reason this does not work (it should) do the following:
+
+Install the core libraries explicitly (CPU-friendly defaults):
 ```bat
 pip install PySide6 pandas numpy matplotlib pyyaml
 ```
@@ -124,20 +131,20 @@ You may see a folder name with a space in your user path (e.g., "AI_Investor_Sys
 ## 6) Configure the GUI Combo → YAML Mapping
 
 In file: `src/system/View/gui.py`  
-There is a CONFIG_MAP dictionary mapping GUI selections to YAML files in experiments/. Make sure the combination you choose in the GUI exists in CONFIG_MAP and the YAML file exists in experiments/. For example:  
+There is a CONFIG_MAP dictionary mapping GUI selections to YAML files in experiments/. Right now, only technical features, lstm, and softmax is implemented. For example:  
 `"technical|lstm|softmax": "experiments/exp_tech_lstm_softmax.yaml"`
 
-If you add more YAMLs, add their combos to CONFIG_MAP accordingly.
+If you more YAMLs are added, their combos to CONFIG_MAP will be added accordingly.
 
 ---
 
 ## 7) Launch the GUI
 
-Using Command Prompt or PowerShell from the repo root (MAKE SURE VENV IS ACTIVATED):
+Using PowerShell from the repo root (MAKE SURE VENV IS ACTIVATED):
 ```bat
-set PYTHONPATH=src && python -m system.View.gui
+$env:PYTHONPATH = "src"
+python -m system.View.gui
 ```
-(If using PowerShell, this works the same in a single line.)
 
 In the GUI:
 - Select your Features (e.g., Technical), Model (e.g., lstm), and Allocator (e.g., softmax).
@@ -151,23 +158,8 @@ In the GUI:
 
 ---
 
-## 8) Run the CLI (Optional, No GUI)
 
-Run a single experiment:
-```bat
-set PYTHONPATH=src && python -m system.View.cli run --config experiments\exp_tech_lstm_softmax.yaml
-```
-
-Build a comparison between two runs (use folder names from artifacts/):
-```bat
-set PYTHONPATH=src && python -m system.View.cli compare --a 20251104_214520_phase1_baseline --b 20251104_214206_phase1_baseline
-```
-
-Open the resulting HTML (double-click in File Explorer or load it in the GUI compare tab).
-
----
-
-## 9) Outputs & Where to Find Them
+## 8) Outputs & Where to Find Them
 
 **Per-run outputs (created automatically):**
 ```
