@@ -1,0 +1,14 @@
+model:
+  type: "transformer"
+  window: 30
+  d_model: 128
+  nhead: 4
+  num_layers: 3
+  epochs: 10
+  lr: 0.0005
+  dim_feedforward: 128
+  dropout: 0.1
+  weight_decay: 0.0
+  patience: 3
+  pooling: "attn"
+  max_grad_norm: 1.0

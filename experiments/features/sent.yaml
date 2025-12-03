@@ -1,0 +1,3 @@
+pipelines:
+  ingest_sentiment: true
+  features_sentiment: true

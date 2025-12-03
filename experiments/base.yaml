@@ -1,19 +1,19 @@
 experiment:
-  name: "phase1_baseline"
+  name: "base"
   artifacts_root: "artifacts"
 
 universe:
   tickers: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"]
 
 dates:
-  start: "2019-01-01"
-  end: "2021-12-31"
+  start: "2023-01-01"
+  end: "2025-10-30"
 
 pipelines:
   ingest_prices: true
   ingest_sentiment: false
   ingest_events: false
-  features_technical: true
+  features_technical: false # default ON
   features_sentiment: false
   features_events: false
   features_correlation: false
@@ -23,18 +23,6 @@ pipelines:
   backtest: true
   report: true
   compare: false
-
-model:
-  type: "lstm"
-  window: 30
-  hidden: 64
-  epochs: 8
-  lr: 0.001
-
-allocator:
-  type: "softmax"
-  temperature: 0.5
-  weight_cap: 0.6
 
 backtest:
   rebalance: "weekly"

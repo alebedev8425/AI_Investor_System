@@ -150,6 +150,19 @@ class ArtifactStore:
     def technical_features_path(self) -> Path:
         return self.features_dir / "technical_features.csv"
 
+    # new: raw blocks for inspection (merged table still goes to technical_features.csv)
+    def sentiment_features_path(self) -> Path:
+        return self.features_dir / "sentiment_features.csv"
+
+    def event_features_path(self) -> Path:
+        return self.features_dir / "event_features.csv"
+
+    def corr_features_path(self) -> Path:
+        return self.features_dir / "correlation_features.csv"
+
+    def graph_features_path(self) -> Path:
+        return self.features_dir / "graph_features.csv"
+
     def scaler_path(self, name: str = "standard_scaler.pkl") -> Path:
         return self.models_dir / name
 
@@ -170,6 +183,10 @@ class ArtifactStore:
         return self.backtests_dir / name
 
     def backtest_metrics_path(self, name: str = "metrics.json") -> Path:
+        return self.backtests_dir / name
+    
+    # prediction-quality metrics (test-set)
+    def prediction_metrics_path(self, name: str = "prediction_metrics.json") -> Path:
         return self.backtests_dir / name
 
     # reports
@@ -382,3 +399,53 @@ class ArtifactStore:
         p = self.compare_dir(tag) / name
         p.mkdir(parents=True, exist_ok=True)
         return p
+    
+    # --- shared cache: sentiment/events/corr/graph ---
+
+    @property
+    def shared_sentiment_dir(self) -> Path:
+        p = self.shared_cache_root / "sentiment"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def shared_sentiment_path(self, key: str) -> Path:
+        return self._shared_path(self.shared_sentiment_dir, key, "csv")
+
+    def shared_sentiment_meta(self, key: str) -> Path:
+        return self._shared_path(self.shared_sentiment_dir, key, "meta.json")
+
+    @property
+    def shared_events_dir(self) -> Path:
+        p = self.shared_cache_root / "events"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def shared_events_path(self, key: str) -> Path:
+        return self._shared_path(self.shared_events_dir, key, "csv")
+
+    def shared_events_meta(self, key: str) -> Path:
+        return self._shared_path(self.shared_events_dir, key, "meta.json")
+
+    @property
+    def shared_corr_dir(self) -> Path:
+        p = self.shared_cache_root / "correlation"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def shared_corr_path(self, key: str) -> Path:
+        return self._shared_path(self.shared_corr_dir, key, "csv")
+
+    def shared_corr_meta(self, key: str) -> Path:
+        return self._shared_path(self.shared_corr_dir, key, "meta.json")
+
+    @property
+    def shared_graph_dir(self) -> Path:
+        p = self.shared_cache_root / "graph"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def shared_graph_path(self, key: str) -> Path:
+        return self._shared_path(self.shared_graph_dir, key, "csv")
+
+    def shared_graph_meta(self, key: str) -> Path:
+        return self._shared_path(self.shared_graph_dir, key, "meta.json")

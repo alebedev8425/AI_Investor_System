@@ -1,0 +1,6 @@
+allocator:
+  type: "rl"
+  lr: 0.01
+  epochs: 50
+  weight_cap: 0.3
+  trade_cost_bps: 10

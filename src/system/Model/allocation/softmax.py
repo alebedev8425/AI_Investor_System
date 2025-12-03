@@ -1,19 +1,35 @@
-# src/system/Model/portfolio/softmax_allocator.py  (replace your class)
+# src/system/Model/portfolio/softmax.py
 
 from __future__ import annotations
 from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 
+
 class SoftmaxAllocator:
+    """
+    Cross-sectional softmax allocator.
+
+    For each date:
+      1) Take model scores (e.g., pred_5d) across tickers.
+      2) Optionally transform them cross-sectionally (zscore / rank / minmax).
+      3) Optionally keep only top-K names by transformed score.
+      4) Apply temperature-scaled softmax to get raw weights.
+      5) Enforce:
+           - optional long-only & per-name cap
+           - either:
+               * allow_cash=True : sum(weights) <= 1 (residual is cash)
+               * allow_cash=False: rescale so sum(weights) = 1
+    """
+
     def __init__(
         self,
         *,
         temperature: float = 1.0,
         weight_cap: float = 0.10,
         long_only: bool = True,
-        transform: str = "zscore",   # 'zscore' | 'rank' | 'minmax' | 'none'
-        top_k: Optional[int] = None, # e.g., 2 or 3
+        transform: str = "zscore",  # 'zscore' | 'rank' | 'minmax' | 'none'
+        top_k: Optional[int] = None,  # e.g., 2 or 3
         allow_cash: bool = True,
         eps: float = 1e-12,
     ) -> None:
@@ -33,17 +49,19 @@ class SoftmaxAllocator:
         self.eps = float(eps)
 
     def _transform_scores(self, a: np.ndarray) -> np.ndarray:
-        a = a.astype(np.float64)
-        mask = np.isfinite(a)
-        if mask.sum() == 0:
-            return np.zeros_like(a)
+        a = np.asarray(a, dtype=np.float64)
+        if a.size == 0:
+            return a
 
         x = a.copy()
+        x[~np.isfinite(x)] = 0.0
+
         if self.transform == "zscore":
             mu = np.nanmean(x)
             sd = np.nanstd(x)
             if not np.isfinite(sd) or sd < 1e-12:
-                return np.zeros_like(x)  # all equal → no tilt
+                # all equal or degenerate -> no tilt
+                return np.zeros_like(x)
             x = (x - mu) / (sd + 1e-12)
 
         elif self.transform == "rank":
@@ -62,7 +80,7 @@ class SoftmaxAllocator:
                 return np.zeros_like(x)
             x = 2.0 * (x - lo) / (hi - lo) - 1.0  # map to [-1, 1]
 
-        # 'none' returns raw scores
+        # 'none' returns raw scores (but cleaned for NaNs/inf)
         return x
 
     def allocate(
@@ -109,9 +127,10 @@ class SoftmaxAllocator:
             z[~mask] = -1e9  # effectively -inf → exp→0
             z = z - np.nanmax(z)  # log-sum-exp stabilization
             z = np.clip(z, -50, 50)  # avoid under/overflow
+
             expz = np.exp(z)
             denom = expz.sum()
-            if not np.isfinite(denom) or denom <= self.eps:
+            if not np.isfinite(denom) or denom <= self.eps or mask.sum() == 0:
                 # Fallback: equal-weight among valid names
                 w = np.zeros_like(s)
                 k = int(mask.sum())
@@ -120,14 +139,30 @@ class SoftmaxAllocator:
             else:
                 w = expz / denom
 
-            # Long-only cap & down-only normalization (allow cash)
+            # Long-only cap & normalization / cash logic
             if self.long_only:
                 w = np.clip(w, 0.0, self.weight_cap)
 
             ssum = float(w.sum())
-            if ssum > 1.0 + 1e-12:
-                w = w / ssum  # scale down only
-            # if ssum <= 1, keep as-is; cash = 1 - ssum
+
+            if self.allow_cash:
+                # If we allow cash, we only scale down if we exceed 100% gross.
+                if ssum > 1.0 + self.eps:
+                    w = w / ssum
+                # If ssum <= 1, residual (1 - ssum) is cash.
+            else:
+                # No cash: force sum(w) = 1. If degenerate, equal-weight on active names.
+                active = (w > 0.0) if self.long_only else mask
+                k = int(active.sum())
+                if ssum <= self.eps or k == 0:
+                    w = np.zeros_like(w)
+                    if k > 0:
+                        w[active] = 1.0 / k
+                    else:
+                        # everything dead; equal-weight all tickers
+                        w[:] = 1.0 / len(w)
+                else:
+                    w = w / ssum
 
             out_parts.append(pd.DataFrame({date_col: d, ticker_col: tickers, "weight": w}))
 
@@ -136,6 +171,6 @@ class SoftmaxAllocator:
 
         return (
             pd.concat(out_parts, ignore_index=True)
-              .sort_values([date_col, ticker_col])
-              .reset_index(drop=True)
+            .sort_values([date_col, ticker_col])
+            .reset_index(drop=True)
         )

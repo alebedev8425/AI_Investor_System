@@ -36,3 +36,17 @@ class ReportingManager:
 
         build_compare_report(a_in, b_in, html, label_a=run_a, label_b=run_b)
         return html
+    
+    def resolve_latest_report_path(self) -> Path | None:
+        """Return latest run's report.html if it exists, else None."""
+        rid = self._store.latest_run()
+        if not rid:
+            return None
+        s = ArtifactStore(self._store.root, create=True)
+        s.ensure_existing_run(rid)
+        p = s.report_html_path()
+        return p if p.exists() else None
+    
+    def expected_compare_html_path(self, run_a: str, run_b: str) -> Path:
+        tag = f"{run_a}_vs_{run_b}"
+        return self._store.compare_html_path(tag)

@@ -1,3 +1,4 @@
+# src/system/Model/reporting/report_builder.py
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +9,23 @@ import matplotlib
 
 matplotlib.use("Agg")  # headless-safe
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+mpl.rcParams.update(
+    {
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "savefig.facecolor": "white",
+        "axes.edgecolor": "#111827",
+        "axes.labelcolor": "#111827",
+        "text.color": "#111827",
+        "xtick.color": "#374151",
+        "ytick.color": "#374151",
+        "grid.color": "#e5e7eb",
+        "axes.grid": True,
+        "grid.alpha": 0.6,
+    }
+)
 
 
 @dataclass
@@ -57,6 +75,54 @@ def _fmt(x: float | int | None, nd=3) -> str:
         return f"{float(x):.{nd}f}"
     except Exception:
         return "—"
+
+
+def _pretty_combo(manifest: dict) -> tuple[str, str, str]:
+    """Return (features_str, model_str, alloc_str) in a minimal, human form."""
+    cfg = (manifest.get("config") or {}) if isinstance(manifest.get("config"), dict) else {}
+
+    # model: accept string or dict with 'type'/'key'
+    def _pick_key(x):
+        if isinstance(x, str):
+            return x
+        if isinstance(x, dict):
+            return x.get("type") or x.get("key")
+        return None
+
+    model = _pick_key(manifest.get("model")) or _pick_key(cfg.get("model")) or "—"
+    alloc = _pick_key(manifest.get("allocator")) or _pick_key(cfg.get("allocator")) or "—"
+
+    # features: accept list like ["tech","sent",...] or map from pipeline booleans
+    features_any = manifest.get("features") or cfg.get("features")
+    pretty = []
+    if isinstance(features_any, (list, tuple)):
+        m = {
+            "tech": "technical",
+            "sent": "sentiment",
+            "events": "events",
+            "corr": "correlations",
+            "graph": "graph",
+        }
+        pretty = [m.get(str(f).lower(), str(f)) for f in features_any]
+
+    if not pretty and isinstance(cfg.get("pipelines"), dict):
+        p = cfg["pipelines"]
+        pairs = [
+            ("features_technical", "technical"),
+            ("features_sentiment", "sentiment"),
+            ("features_events", "events"),
+            ("features_correlation", "correlations"),
+            ("features_graph", "graph"),
+        ]
+        for k, label in pairs:
+            if bool(p.get(k)):
+                pretty.append(label)
+
+    if not pretty:
+        # GUI keeps technical always-on; default to it if we can't infer.
+        pretty = ["technical"]
+
+    return (", ".join(pretty), str(model), str(alloc))
 
 
 # ---------- plots ----------
@@ -146,6 +212,11 @@ def build_run_report(run: RunInputs, out_html: Path) -> None:
     df = _safe_read_daily(run.daily_path)
     metrics = _safe_read_metrics(run.metrics_path)
     manifest = _safe_read_manifest(run.manifest_path)
+    # prediction-quality metrics (test set)
+    pred_metrics_path = run.metrics_path.parent / "prediction_metrics.json"
+    pred_metrics = _safe_read_metrics(pred_metrics_path)
+
+    features_str, model_str, alloc_str = _pretty_combo(manifest)
 
     assets = run.assets_dir
     eq_png = assets / "equity.png"
@@ -165,23 +236,28 @@ def build_run_report(run: RunInputs, out_html: Path) -> None:
         metrics["cumulative_return"] = float((1 + df["ret"].astype(float)).prod() - 1.0)
 
     css = """
-    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;margin:24px;color:#f5f5f5}
-    h1,h2,h3{color:#fafafa}
-    .muted{color:#cbd5e1}
+    :root{ --paper:#ffffff; --ink:#111827; --muted:#374151; --line:#e5e7eb; }
+    html,body{background:var(--paper)}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;margin:24px;color:var(--ink)}
+    /* clamp page so QTextBrowser never asks for huge width */
+    .container{max-width:1060px;margin:0 auto}
+
     .grid{display:grid;gap:20px}
-    .g2{grid-template-columns:1fr 1fr}
-    .g3{grid-template-columns:1fr 1fr 1fr}
-    .card{border:1px solid #e5e7eb22;border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    table{border-collapse:collapse;width:100%}
-    th,td{padding:8px 10px;border-bottom:1px solid #f3f4f633;text-align:left;color:#e5e7eb}
-    .k{color:#e5e7eb;width:60%}
-    img{max-width:100%;border-radius:10px;border:1px solid #eeeeee33}
-    code,pre{color:#e5e7eb}
-    a{color:#93c5fd}
+    /* critical: let tracks shrink below min-content of images/tables */
+    .g2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+    .g3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}
+    .grid > *{min-width:0} /* allow children to shrink */
+
+    .card{border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);background:#fff}
+    table{border-collapse:collapse;width:100%;table-layout:fixed}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;color:var(--ink);word-break:break-word;overflow-wrap:anywhere}
+    .k{color:var(--ink);width:60%}
+    img{display:block;width:100%;max-width:100%;height:auto;border-radius:10px;border:1px solid var(--line)}
+    code,pre{color:var(--ink);background:#f3f4f6;border:1px solid var(--line);border-radius:6px;padding:2px 6px;word-break:break-word;overflow-wrap:anywhere}
+    a{color:#1f2937;text-decoration:underline}
     .card h3{display:block;margin:0 0 8px}
     figure.plot{margin:0}
     figure.plot figcaption{display:block;margin:0 0 8px;font-weight:600}
-    .card img{display:block;width:100%;height:auto;max-width:100%;border-radius:10px;border:1px solid #eeeeee33}
     """
 
     html = f"""<!doctype html>
@@ -191,11 +267,10 @@ def build_run_report(run: RunInputs, out_html: Path) -> None:
 .plot-table td{{padding:0;border:none}}
 .card-title{{margin:0 0 8px;font-weight:600;font-size:16px}}
 </style></head>
-<body>
+<body><div class="container">
   <h1>Run Report</h1>
   <div class="muted">run_id: {manifest.get("run_id", "?")} • created: {manifest.get("created_utc", "?")}</div>
-
-  <div class="grid g3" style="margin-top:16px">
+  <div class="muted">model: <code>{model_str}</code> | alloc: <code>{alloc_str}</code> | features: <code>{features_str}</code></div>  <div class="grid g3" style="margin-top:16px">
     <div class="card">
       <h3 class="card-title">Headline</h3>
       <table>
@@ -207,10 +282,17 @@ def build_run_report(run: RunInputs, out_html: Path) -> None:
       </table>
     </div>
     <div class="card">
-      <h3 class="card-title">Environment</h3>
-      <pre class="muted" style="margin:0;white-space:pre-wrap">{json.dumps(manifest.get("versions", {}), indent=2)}</pre>
+      <h3 class="card-title">Prediction Metrics (test set)</h3>
+      <table>
+        <tr><td class="k">MAE</td><td>{_fmt(pred_metrics.get("mae"), nd=6)}</td></tr>
+        <tr><td class="k">RMSE</td><td>{_fmt(pred_metrics.get("rmse"), nd=6)}</td></tr>
+        <tr><td class="k">Hit rate (sign)</td><td>{_fmt_pct(pred_metrics.get("hit_rate"))}</td></tr>
+        <tr><td class="k">IC (Spearman, mean)</td><td>{_fmt(pred_metrics.get("ic_mean"), nd=3)}</td></tr>
+        <tr><td class="k">IC t-stat</td><td>{_fmt(pred_metrics.get("ic_tstat"), nd=3)}</td></tr>
+        <tr><td class="k">Top–bottom decile spread</td><td>{_fmt_pct(pred_metrics.get("decile_long_short_spread"))}</td></tr>
+      </table>
     </div>
-    <div class="card">
+    <div class="card" style="margin-top:16px">
       <h3 class="card-title">Artifacts</h3>
       <div class="muted">Daily portfolio CSV: <code>backtests/daily_returns.csv</code></div>
     </div>
@@ -245,6 +327,7 @@ def build_run_report(run: RunInputs, out_html: Path) -> None:
       </table>
     </div>
   </div>
+</div>
 </body></html>"""
     out_html.parent.mkdir(parents=True, exist_ok=True)
     out_html.write_text(html, encoding="utf-8")
@@ -319,23 +402,28 @@ def build_compare_report(
     ]
 
     css = """
-    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;margin:24px;color:#f5f5f5}
-    h1,h2,h3{color:#fafafa}
-    .muted{color:#cbd5e1}
+    :root{ --paper:#ffffff; --ink:#111827; --muted:#374151; --line:#e5e7eb; }
+    html,body{background:var(--paper)}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;margin:24px;color:var(--ink)}
+    /* clamp page so QTextBrowser never asks for huge width */
+    .container{max-width:1060px;margin:0 auto}
+
     .grid{display:grid;gap:20px}
-    .g2{grid-template-columns:1fr 1fr}
-    .g3{grid-template-columns:1fr 1fr 1fr}
-    .card{border:1px solid #e5e7eb22;border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    table{border-collapse:collapse;width:100%}
-    th,td{padding:8px 10px;border-bottom:1px solid #f3f4f633;text-align:left;color:#e5e7eb}
-    .k{color:#e5e7eb;width:60%}
-    img{max-width:100%;border-radius:10px;border:1px solid #eeeeee33}
-    code,pre{color:#e5e7eb}
-    a{color:#93c5fd}
+    /* critical: let tracks shrink below min-content of images/tables */
+    .g2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+    .g3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}
+    .grid > *{min-width:0} /* allow children to shrink */
+
+    .card{border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);background:#fff}
+    table{border-collapse:collapse;width:100%;table-layout:fixed}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;color:var(--ink);word-break:break-word;overflow-wrap:anywhere}
+    .k{color:var(--ink);width:60%}
+    img{display:block;width:100%;max-width:100%;height:auto;border-radius:10px;border:1px solid var(--line)}
+    code,pre{color:var(--ink);background:#f3f4f6;border:1px solid var(--line);border-radius:6px;padding:2px 6px;word-break:break-word;overflow-wrap:anywhere}
+    a{color:#1f2937;text-decoration:underline}
     .card h3{display:block;margin:0 0 8px}
     figure.plot{margin:0}
     figure.plot figcaption{display:block;margin:0 0 8px;font-weight:600}
-    .card img{display:block;width:100%;height:auto;max-width:100%;border-radius:10px;border:1px solid #eeeeee33}
     """
 
     trs = "\n".join(f"<tr><td>{k}</td><td>{va}</td><td>{vb}</td></tr>" for k, va, vb in rows)
@@ -346,7 +434,7 @@ def build_compare_report(
 .plot-table{{width:100%;border-collapse:collapse}}
 .plot-table td{{padding:0;border:none}}
 .card-title{{margin:0 0 8px;font-weight:600;font-size:16px}}
-</style></head><body>
+</style></head><body><div class="container">
 <h1>Comparison</h1>
 
 <div class="grid g2">
@@ -371,6 +459,6 @@ def build_compare_report(
     {trs}
   </table>
 </div>
-</body></html>"""
+</div></body></html>"""
     out_html.parent.mkdir(parents=True, exist_ok=True)
     out_html.write_text(html, encoding="utf-8")

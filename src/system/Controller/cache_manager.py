@@ -1,4 +1,4 @@
-# src/system/data/cache_manager.py
+# src/system/Controller/cache_manager.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import hashlib
 import logging
+import shutil
 
 
 from system.Model.artifact_store import ArtifactStore
@@ -50,6 +51,76 @@ class CacheManager:
                 "price_key": price_key,
                 "use_adj": bool(use_adj),
                 "ma_windows": list(ma_windows),
+            }
+        )
+
+    def sentiment_key(
+        self,
+        tickers,
+        start,
+        end,
+        source: str = "alphavantage",
+    ) -> str:
+        tickers = sorted([str(t).upper() for t in tickers])
+        return _key(
+            {
+                "type": "sentiment",
+                "tickers": tickers,
+                "start": str(start),
+                "end": str(end),
+                "source": source,
+            }
+        )
+
+    def events_key(
+        self,
+        tickers,
+        start,
+        end,
+        source: str = "alphavantage",
+    ) -> str:
+        tickers = sorted([str(t).upper() for t in tickers])
+        return _key(
+            {
+                "type": "events",
+                "tickers": tickers,
+                "start": str(start),
+                "end": str(end),
+                "source": source,
+            }
+        )
+
+    def corr_key(
+        self,
+        price_key: str,
+        window: int,
+        min_periods: int,
+        corr_threshold: float,
+    ) -> str:
+        return _key(
+            {
+                "type": "corr_features",
+                "price_key": price_key,
+                "window": int(window),
+                "min_periods": int(min_periods),
+                "corr_threshold": float(corr_threshold),
+            }
+        )
+
+    def graph_key(
+        self,
+        price_key: str,
+        window: int,
+        min_periods: int,
+        corr_threshold: float,
+    ) -> str:
+        return _key(
+            {
+                "type": "graph_features",
+                "price_key": price_key,
+                "window": int(window),
+                "min_periods": int(min_periods),
+                "corr_threshold": float(corr_threshold),
             }
         )
 
@@ -184,6 +255,240 @@ class CacheManager:
         )
         return feats
 
+    def ensure_sentiment(
+        self,
+        *,
+        tickers,
+        start,
+        end,
+        fetch_fn,
+        force_refresh: bool = False,
+        source: str = "alphavantage",
+    ) -> pd.DataFrame:
+        skey = self.sentiment_key(tickers, start, end, source=source)
+        shared_csv = self._store.shared_sentiment_path(skey)
+        shared_meta = self._store.shared_sentiment_meta(skey)
+        run_csv = self._store.sentiment_features_path()
+
+        if (not force_refresh) and self.shared_exists(shared_csv):
+            self._log.info("[cache:sentiment] HIT key=%s -> %s", skey, shared_csv.name)
+            self._store.materialize_to_run(shared_csv, run_csv)
+            self._store.write_run_meta(
+                "sentiment",
+                {
+                    "key": skey,
+                    "source": "shared",
+                    "shared_csv": str(shared_csv),
+                },
+            )
+            return pd.read_csv(run_csv)
+
+        self._log.info("[cache:sentiment] MISS key=%s (fetching)", skey)
+        df = fetch_fn()
+        df = df.sort_values(["date", "ticker"]).reset_index(drop=True)
+
+        self.save_shared_csv(
+            df,
+            shared_csv,
+            shared_meta,
+            meta={
+                "key": skey,
+                "tickers": sorted([str(t).upper() for t in tickers]),
+                "start": str(start),
+                "end": str(end),
+                "source": source,
+            },
+        )
+
+        self._store.materialize_to_run(shared_csv, run_csv)
+        self._store.write_run_meta(
+            "sentiment",
+            {
+                "key": skey,
+                "source": "fresh",
+                "shared_csv": str(shared_csv),
+            },
+        )
+        return df
+
+    def ensure_events(
+        self,
+        *,
+        tickers,
+        start,
+        end,
+        fetch_fn,
+        force_refresh: bool = False,
+        source: str = "alphavantage",
+    ) -> pd.DataFrame:
+        ekey = self.events_key(tickers, start, end, source=source)
+        shared_csv = self._store.shared_events_path(ekey)
+        shared_meta = self._store.shared_events_meta(ekey)
+        run_csv = self._store.event_features_path()
+
+        if (not force_refresh) and self.shared_exists(shared_csv):
+            self._log.info("[cache:events] HIT key=%s -> %s", ekey, shared_csv.name)
+            self._store.materialize_to_run(shared_csv, run_csv)
+            self._store.write_run_meta(
+                "events",
+                {
+                    "key": ekey,
+                    "source": "shared",
+                    "shared_csv": str(shared_csv),
+                },
+            )
+            return pd.read_csv(run_csv)
+
+        self._log.info("[cache:events] MISS key=%s (fetching)", ekey)
+        df = fetch_fn()
+        df = df.sort_values(["date", "ticker"]).reset_index(drop=True)
+
+        self.save_shared_csv(
+            df,
+            shared_csv,
+            shared_meta,
+            meta={
+                "key": ekey,
+                "tickers": sorted([str(t).upper() for t in tickers]),
+                "start": str(start),
+                "end": str(end),
+                "source": source,
+            },
+        )
+
+        self._store.materialize_to_run(shared_csv, run_csv)
+        self._store.write_run_meta(
+            "events",
+            {
+                "key": ekey,
+                "source": "fresh",
+                "shared_csv": str(shared_csv),
+            },
+        )
+        return df
+
+    def ensure_correlation(
+        self,
+        *,
+        price_key: str,
+        df_returns: pd.DataFrame,
+        builder,
+        overwrite: bool = False,
+    ) -> pd.DataFrame:
+        ckey = self.corr_key(
+            price_key,
+            builder.cfg.window,
+            builder.cfg.min_periods,
+            builder.cfg.corr_threshold,
+        )
+        shared_csv = self._store.shared_corr_path(ckey)
+        shared_meta = self._store.shared_corr_meta(ckey)
+        run_csv = self._store.corr_features_path()
+
+        if (not overwrite) and self.shared_exists(shared_csv):
+            self._log.info("[cache:corr] HIT key=%s -> %s", ckey, shared_csv.name)
+            self._store.materialize_to_run(shared_csv, run_csv)
+            self._store.write_run_meta(
+                "correlation",
+                {
+                    "key": ckey,
+                    "source": "shared",
+                    "shared_csv": str(shared_csv),
+                    "price_key": price_key,
+                },
+            )
+            return pd.read_csv(run_csv)
+
+        self._log.info("[cache:corr] MISS key=%s (building)", ckey)
+        feats = builder.build(df_returns)
+        feats = feats.sort_values(["date", "ticker"]).reset_index(drop=True)
+
+        self.save_shared_csv(
+            feats,
+            shared_csv,
+            shared_meta,
+            meta={
+                "key": ckey,
+                "price_key": price_key,
+                "window": builder.cfg.window,
+                "min_periods": builder.cfg.min_periods,
+                "corr_threshold": float(builder.cfg.corr_threshold),
+            },
+        )
+
+        self._store.materialize_to_run(shared_csv, run_csv)
+        self._store.write_run_meta(
+            "correlation",
+            {
+                "key": ckey,
+                "source": "fresh",
+                "shared_csv": str(shared_csv),
+                "price_key": price_key,
+            },
+        )
+        return feats
+
+    def ensure_graph(
+        self,
+        *,
+        price_key: str,
+        df_returns: pd.DataFrame,
+        builder,
+        overwrite: bool = False,
+    ) -> pd.DataFrame:
+        gkey = self.graph_key(
+            price_key,
+            builder.cfg.window,
+            builder.cfg.min_periods,
+            builder.cfg.corr_threshold,
+        )
+        shared_csv = self._store.shared_graph_path(gkey)
+        shared_meta = self._store.shared_graph_meta(gkey)
+        run_csv = self._store.graph_features_path()
+
+        if (not overwrite) and self.shared_exists(shared_csv):
+            self._log.info("[cache:graph] HIT key=%s -> %s", gkey, shared_csv.name)
+            self._store.materialize_to_run(shared_csv, run_csv)
+            self._store.write_run_meta(
+                "graph",
+                {
+                    "key": gkey,
+                    "source": "shared",
+                    "shared_csv": str(shared_csv),
+                    "price_key": price_key,
+                },
+            )
+            return pd.read_csv(run_csv)
+
+        self._log.info("[cache:graph] MISS key=%s (building)", gkey)
+        feats = builder.build(df_returns)
+        feats = feats.sort_values(["date", "ticker"]).reset_index(drop=True)
+
+        self.save_shared_csv(
+            feats,
+            shared_csv,
+            shared_meta,
+            meta={
+                "key": gkey,
+                "price_key": price_key,
+                "window": builder.cfg.window,
+                "min_periods": builder.cfg.min_periods,
+                "corr_threshold": float(builder.cfg.corr_threshold),
+            },
+        )
+
+        self._store.materialize_to_run(shared_csv, run_csv)
+        self._store.write_run_meta(
+            "graph",
+            {
+                "key": gkey,
+                "source": "fresh",
+                "shared_csv": str(shared_csv),
+                "price_key": price_key,
+            },
+        )
+        return feats
+
     # ---- prices ----
     def prices_exists(self) -> bool:
         return self._store.price_cache_path().exists()
@@ -215,3 +520,17 @@ class CacheManager:
         p = self._store.technical_features_path()
         if p.exists():
             p.unlink()
+
+        # ---- cache clearing helpers ----
+
+    def clear_shared_cache(self) -> None:
+        """
+        Delete the shared cache directory (_shared_cache) under artifacts_root.
+        Keeps individual run folders intact.
+        """
+        root = self._store.shared_cache_root
+        if root.exists():
+            shutil.rmtree(root)
+            self._log.info("Cleared shared cache at %s", root)
+        else:
+            self._log.info("Shared cache directory does not exist: %s", root)

@@ -1,0 +1,8 @@
+model:
+  type: "lstm"
+  window: 30
+  hidden: 64
+  epochs: 8
+  lr: 0.001
+  lambda_vol: 0.1
+  w_vol: 1.0

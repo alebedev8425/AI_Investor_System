@@ -1,4 +1,4 @@
-# src/system/model/calendar.py
+# src/system/model/trading_calendar.py
 from __future__ import annotations
 from typing import Iterable, Optional
 import pandas as pd

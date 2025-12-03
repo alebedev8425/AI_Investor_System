@@ -13,10 +13,11 @@ from system.Controller.price_manager import PriceManager
 from system.Controller.feature_pipeline import FeaturePipeline
 from system.Controller.training_manager import TrainingManager
 from system.Controller.allocation_manager import AllocationManager
-from system.Model.backtesting.backtester import Backtester
+from system.Model.evaluation.backtester import Backtester
 from system.Model.data.trading_calendar import TradingCalendar
 from system.Controller.cache_manager import CacheManager
 from system.Controller.reporting_manager import ReportingManager
+from system.Model.evaluation.prediction_metrics import PredictionEvaluator
 
 
 class RunManager:
@@ -57,7 +58,7 @@ class RunManager:
 
     # public API
 
-    def run(self) -> None:
+    def run(self) -> bool:
         """Execute the configured Phase-1 pipeline."""
         # 0) Create a run folder + manifest
         self._bootstrap_run()
@@ -76,32 +77,96 @@ class RunManager:
             prices = self._cache.load_prices()
             self._log.info("Loaded prices from cache: %d rows", len(prices))
 
-        # 2) Technical features
-        if self._cfg.pipelines.features_technical:
-            feats = self._features.build_technical(prices, overwrite=False)
+        # incase of empty / invalid symbols for tickers in gui
+        if prices is None or prices.empty:
+            self._log.error(
+                "No price data fetched for the requested universe: %s. "
+                "Check symbol spelling (e.g., 'AAPL' not 'APPL') or date range.",
+                ",".join(self._cfg.tickers),
+            )
+            return False  # stop the run gracefully
+
+        # 2) Features (technical + optional sentiment/events/corr/graph)
+        if any(
+            [
+                self._cfg.pipelines.features_technical,
+                self._cfg.pipelines.features_sentiment,
+                self._cfg.pipelines.features_events,
+                self._cfg.pipelines.features_correlation,
+                self._cfg.pipelines.features_graph,
+            ]
+        ):
+            feats = self._features.build_features(self._cfg, prices, overwrite=False)
         else:
             feats = self._cache.load_technical_features()
-            self._log.info("Loaded technical features from cache: %d rows", len(feats))
+            self._log.info("Loaded features from cache: %d rows", len(feats))
 
-        # 3) Train & predict (Phase-1: LSTM only is fine; TrainingManager encapsulates that)
+        # 3) Train & predict
         if self._cfg.pipelines.train_model:
             preds = self._trainer.run(self._cfg)  # persists predictions internally too
         else:
             preds = self._store.load_csv(self._store.predictions_path())
             self._log.info("Loaded predictions from artifacts: %d rows", len(preds))
 
-        # 4) Allocate (Phase-1: softmax via AllocationManager)
+        # 3b) Prediction-quality metrics on the test set
+        try:
+            evaluator = PredictionEvaluator(horizon_col="target_5d", pred_col="pred_5d")
+
+            # feats = full engineered table, includes target_5d
+            # preds = test-set predictions ['date','ticker','pred_5d']
+            pred_result = evaluator.evaluate(preds_df=preds, labels_df=feats)
+
+            if pred_result.metrics:
+                self._store.save_json(
+                    pred_result.metrics,
+                    self._store.prediction_metrics_path(),
+                )
+                self._log.info(
+                    "Prediction metrics: MAE=%.6f  RMSE=%.6f  IC=%.3f  Hit=%.2f%%",
+                    pred_result.metrics.get("mae", float("nan")),
+                    pred_result.metrics.get("rmse", float("nan")),
+                    pred_result.metrics.get("ic_mean", float("nan")),
+                    100.0 * pred_result.metrics.get("hit_rate", float("nan")),
+                )
+            else:
+                self._log.warning(
+                    "Prediction metrics: no overlapping data between preds and labels."
+                )
+        except Exception as e:
+            self._log.warning("Prediction evaluation failed: %s", e)
+
+        # 4) Allocate
         if self._cfg.pipelines.allocate:
             # keep calendar optional; AllocationManager may ignore it for softmax
-            weights = self._allocator.run_softmax(self._cfg, preds)
+            weights = self._allocator.run(self._cfg, preds)
         else:
             weights = self._store.load_csv(self._store.weights_path())
             self._log.info("Loaded weights from artifacts: %d rows", len(weights))
 
         # 5) Backtest
         if self._cfg.pipelines.backtest:
-            returns = self._compute_returns_for_backtest(prices)
-            daily, metrics = self._backtester.run(weights=weights, returns=returns)
+            returns = self._backtester._compute_returns_for_backtest(prices)
+
+            # backtest on test period only where we have actual predictions
+            weights = weights.copy()
+            weights["date"] = pd.to_datetime(weights["date"])
+            test_start = weights["date"].min()
+            test_end = weights["date"].max()
+
+            returns_bt = returns.copy()
+            returns_bt["date"] = pd.to_datetime(returns_bt["date"])
+            returns_bt = returns_bt[
+                (returns_bt["date"] >= test_start) & (returns_bt["date"] <= test_end)
+            ].copy()
+
+            self._log.info(
+                "Backtest period is: %s to %s, based on weights date range (%d rows).",
+                test_start.date().isoformat(),
+                test_end.date().isoformat(),
+                len(returns_bt),
+            )
+
+            daily, metrics = self._backtester.run(weights=weights, returns=returns_bt)
 
             # (A) normalized portfolio daily returns for reporting: ['date','ret']
             daily_out = daily[["date", "port_ret"]].rename(columns={"port_ret": "ret"})
@@ -135,6 +200,8 @@ class RunManager:
                 out = self._reporting.build_compare(baseline, self._store.run_id)
                 self._log.info("Comparison report written: %s", out)
 
+        return True
+
     # ---------- helpers ----------
 
     def _bootstrap_run(self) -> None:
@@ -162,20 +229,3 @@ class RunManager:
         d["tickers"] = [t.upper() for t in cfg.tickers]
 
         return d
-
-    @staticmethod
-    def _compute_returns_for_backtest(prices: pd.DataFrame) -> pd.DataFrame:
-        """
-        Build tidy daily returns for backtest.
-        Uses 'adj_close' if present, else 'close'. Expects columns: ['date','ticker',...].
-        Output columns: ['date','ticker','ret'] with date as Timestamp (normalized to midnight).
-        """
-        df = prices.copy()
-        df["date"] = pd.to_datetime(df["date"])
-        price_col = "adj_close" if "adj_close" in df.columns else "close"
-        if price_col not in df.columns:
-            raise ValueError("Prices missing both 'adj_close' and 'close' columns.")
-
-        df = df.sort_values(["ticker", "date"])
-        df["ret"] = df.groupby("ticker")[price_col].pct_change().fillna(0.0)
-        return df[["date", "ticker", "ret"]].reset_index(drop=True)

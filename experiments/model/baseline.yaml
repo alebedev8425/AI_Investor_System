@@ -1,0 +1,5 @@
+model:
+  type: "baseline"
+  baseline_type: "past5d_mom"
+  horizon: 5
+  window: 60

@@ -5,6 +5,8 @@
   "editor.formatOnSave": true,
   "ruff.enable": true,
   "ruff.formatOnSave": true,
+  "files.defaultLanguage": "python",
+  "python.analysis.renameFileToMatchModule": false,
     // keep format on save for code, but NOT for Markdown
   "[markdown]": {
     "editor.formatOnSave": false,

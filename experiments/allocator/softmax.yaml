@@ -1,0 +1,4 @@
+allocator:
+  type: "softmax"
+  temperature: 0.5
+  weight_cap: 0.6

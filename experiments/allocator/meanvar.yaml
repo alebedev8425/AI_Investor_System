@@ -1,0 +1,5 @@
+allocator:
+  type: "meanvar"
+  risk_aversion: 5.0
+  cov_lookback: 60
+  weight_cap: 0.4

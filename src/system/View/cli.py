@@ -5,6 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 import json
+import sys
 
 # --- Model imports ---
 from system.Model.experiment_config import ExperimentConfig
@@ -14,19 +15,25 @@ from system.Controller.cache_manager import CacheManager
 from system.Model.data.trading_calendar import TradingCalendar
 from system.Model.data.data_validator import DataValidator
 from system.Model.features.technical_features import TechnicalFeatureBuilder
-from system.Model.backtesting.backtester import Backtester
+from system.Model.features.stat_vol import StatVolFeatureBuilder
+from system.Model.evaluation.backtester import Backtester
 from system.Controller.reporting_manager import ReportingManager
 
 
 # --- Controller imports ---
 from system.Controller.price_manager import PriceManager
 from system.Controller.feature_pipeline import FeaturePipeline
+from system.Model.features.correlation import CorrelationFeatureBuilder
+from system.Model.features.graph import GraphFeatureBuilder
+from system.Model.data.data_sources.sentiment import SentimentDataSource
+from system.Model.data.data_sources.event import EventDataSource
 from system.Controller.training_manager import TrainingManager
 from system.Controller.allocation_manager import AllocationManager
 from system.Controller.run_manager import RunManager
 
 # --- Utility imports ---
 from system.Model.utils.repro import configure_reproducibility
+from system.Model.utils.config_loader import build_config_dict
 
 
 def _build_services(cfg: ExperimentConfig) -> tuple[RunManager, ArtifactStore]:
@@ -35,16 +42,33 @@ def _build_services(cfg: ExperimentConfig) -> tuple[RunManager, ArtifactStore]:
     The RunManager will call store.new_run(...) when runner.run() is called.
     """
     store = ArtifactStore(cfg.artifacts_root)
-
-    # --- shared services (Model layer) ---
+    # --- shared services ---
     cache = CacheManager(store)
     calendar = TradingCalendar()
     validator = DataValidator()
     source = PriceDataSource()
 
+    # new data sources / builders
+    sent_src = SentimentDataSource()
+    evt_src = EventDataSource()
+    corr_builder = CorrelationFeatureBuilder()
+    graph_builder = GraphFeatureBuilder()
+    stat_vol_builder = StatVolFeatureBuilder()
+
     # --- controllers ---
     price_mgr = PriceManager(source=source, cache=cache, calendar=calendar, validator=validator)
-    feat_pipe = FeaturePipeline(cache=cache, technical_builder=TechnicalFeatureBuilder())
+
+    feat_pipe = FeaturePipeline(
+        cache=cache,
+        store=store,
+        technical_builder=TechnicalFeatureBuilder(),
+        sentiment_source=sent_src,
+        event_source=evt_src,
+        corr_builder=corr_builder,
+        graph_builder=graph_builder,
+        stat_vol_builder=stat_vol_builder,
+    )
+
     trainer_mgr = TrainingManager(store=store)
     alloc_mgr = AllocationManager(store=store)
     backtester = Backtester(
@@ -85,7 +109,47 @@ def cmd_run(args: argparse.Namespace) -> None:
     )
 
     runner, _ = _build_services(cfg)
-    runner.run()  # orchestrates Phase-1: prices -> tech features -> LSTM -> softmax -> backtest
+    ok = (
+        runner.run()
+    )  # orchestrates Phase-1: prices -> tech features -> LSTM -> softmax -> backtest
+    sys.exit(0 if ok else 2)  # <<< exit non-zero if aborted
+
+
+def cmd_recipe(args: argparse.Namespace) -> None:
+    feature_layers = [s for s in (args.features or "").split(",") if s.strip()]
+    cfg_dict = build_config_dict(
+        base="base",
+        feature_layers=feature_layers,
+        model=args.model,
+        allocator=args.allocator,
+    )
+    cfg = ExperimentConfig.from_dict(cfg_dict)
+
+    device = configure_reproducibility(
+        seed_python=cfg.seeds.python,
+        seed_numpy=cfg.seeds.numpy,
+        seed_torch=cfg.seeds.torch,
+        device_pref=None,
+        strict=None,
+    )
+
+    logging.getLogger(__name__).info(
+        f"[repro] device={device} | "
+        f"seeds(py={cfg.seeds.python}, np={cfg.seeds.numpy}, torch={cfg.seeds.torch})"
+    )
+
+    try:
+        runner, _ = _build_services(cfg)
+        ok = runner.run()
+        sys.exit(0 if ok else 2)
+    except ValueError as e:
+        msg = str(e)
+        if msg.startswith("INSUFFICIENT_DATA:"):
+            logging.error("ERROR:INSUFFICIENT_DATA %s", msg)
+            sys.exit(3)  # GUI will show a tailored popup for code 3
+        # otherwise treat as generic failure
+        logging.exception("Unhandled error")
+        sys.exit(2)
 
 
 def cmd_list_runs(args: argparse.Namespace) -> None:
@@ -188,7 +252,36 @@ def main() -> None:
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    # run
+    # recipe (composable configs)
+    p_recipe = sub.add_parser(
+        "recipe",
+        help=(
+            "Run using composable config layers: base + features + model + allocator "
+            "(ignores --config)"
+        ),
+    )
+    p_recipe.add_argument(
+        "--features",
+        type=str,
+        default="tech",
+        help="Comma-separated feature layers (e.g. 'tech,sentiment,events')",
+    )
+    p_recipe.add_argument(
+        "--model",
+        type=str,
+        required=True,
+        choices=["lstm", "transformer", "gnn", "baseline"],
+        help="Model key matching experiments/model/<model>.yaml",
+    )
+    p_recipe.add_argument(
+        "--allocator",
+        type=str,
+        required=True,
+        help="Allocator key matching experiments/allocator/<allocator>.yaml",
+    )
+    p_recipe.set_defaults(func=cmd_recipe)
+
+    # run (fixed config YAML)
     p_run = sub.add_parser("run", help="Execute a Phase-1 experiment end-to-end")
     p_run.add_argument("--config", type=Path, required=True, help="Path to experiment YAML")
     p_run.set_defaults(func=cmd_run)

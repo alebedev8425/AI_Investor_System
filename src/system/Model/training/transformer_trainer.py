@@ -1,4 +1,3 @@
-# src/system/Model/training/lstm_trainer.py
 from __future__ import annotations
 
 from typing import Optional, Sequence
@@ -9,11 +8,16 @@ import torch.nn as nn
 import torch.optim as optim
 
 
-class LstmModelTrainer:
+# ---------------- Trainer (builder + optimizer logic) ----------------
+
+class TransformerModelTrainer:
     """
-    Now supports:
-      - single-target (x, y_ret) batches for legacy use
-      - multi-target (x, y_ret, y_vol_real, y_vol_garch) for GINN-style training
+    MASTER-style Transformer trainer.
+
+    - Optimizes the provided TransformerModel on (train, val) loaders.
+    - Early-stops on validation loss (patience).
+    - Clips gradients (max_grad_norm).
+    - Provides predict() -> DataFrame(['date','ticker','pred_5d']).
     """
 
     def __init__(
@@ -23,27 +27,32 @@ class LstmModelTrainer:
         epochs: int,
         lr: float,
         device: torch.device,
-        patience: int = 5,
-        lambda_vol: float = 0.1,  # weight between data and GARCH prior
-        w_vol: float = 1.0,  # overall vol-loss weight
+        patience: int = 3,
+        weight_decay: float = 0.0,
+        max_grad_norm: float = 1.0,
     ) -> None:
         self.model = model.to(device)
         self.epochs = int(epochs)
         self.lr = float(lr)
         self.device = device
         self.patience = int(patience)
-        self.lambda_vol = float(lambda_vol)
-        self.w_vol = float(w_vol)
+        self.weight_decay = float(weight_decay)
+        self.max_grad_norm = float(max_grad_norm)
+
         self._best_state: Optional[dict] = None
 
     def _loss(self) -> nn.Module:
+        # MSE on normalized target_5d_norm
         return nn.MSELoss()
 
     def fit(self, train_loader: DataLoader, val_loader: Optional[DataLoader] = None) -> dict:
-        opt = optim.Adam(self.model.parameters(), lr=self.lr)
+        opt = optim.Adam(
+            self.model.parameters(),
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+        )
         best_val = float("inf")
         bad = 0
-        mse = self._loss()
 
         for _ in range(self.epochs):
             # ---- train ----
@@ -51,32 +60,13 @@ class LstmModelTrainer:
             for batch in train_loader:
                 if not isinstance(batch, (tuple, list)) or len(batch) < 2:
                     raise ValueError("Expected DataLoader to yield (x, y, ...)")
-                x = batch[0].to(self.device)
-                y_ret = batch[1].to(self.device)
+                x, y = batch[0].to(self.device), batch[1].to(self.device)
 
                 opt.zero_grad()
-                ret_pred, vol_pred = self.model(x)  # [B], [B]
-
-                # base return loss
-                loss_ret = mse(ret_pred, y_ret)
-
-                if len(batch) >= 4:
-                    # multi-task vol losses
-                    y_vol_real = batch[2].to(self.device)
-                    y_vol_garch = batch[3].to(self.device)
-
-                    loss_vol_real = mse(vol_pred, y_vol_real)
-                    loss_vol_garch = mse(vol_pred, y_vol_garch)
-
-                    loss_vol = (
-                        self.lambda_vol * loss_vol_real + (1.0 - self.lambda_vol) * loss_vol_garch
-                    )
-                    loss = loss_ret + self.w_vol * loss_vol
-                else:
-                    # legacy single-target path
-                    loss = loss_ret
-
+                pred = self.model(x).squeeze(-1)
+                loss = self._loss()(pred, y)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                 opt.step()
 
             # ---- validate ----
@@ -93,16 +83,13 @@ class LstmModelTrainer:
                 for batch in val_loader:
                     if not isinstance(batch, (tuple, list)) or len(batch) < 2:
                         raise ValueError("Expected DataLoader to yield (x, y, ...)")
-                    x = batch[0].to(self.device)
-                    y_ret = batch[1].to(self.device)
-                    ret_pred, vol_pred = self.model(x)
-                    # validation only monitors return loss
-                    val_loss += mse(ret_pred, y_ret).item()
+                    x, y = batch[0].to(self.device), batch[1].to(self.device)
+                    pred = self.model(x).squeeze(-1)
+                    val_loss += self._loss()(pred, y).item()
                     n += 1
             val_loss /= max(1, n)
 
-            improved = val_loss < best_val - 1e-9
-            if improved:
+            if val_loss < best_val - 1e-9:
                 best_val = val_loss
                 bad = 0
                 self._best_state = {
@@ -128,20 +115,16 @@ class LstmModelTrainer:
         dates: Sequence[pd.Timestamp],
         tickers: Sequence[str],
     ) -> pd.DataFrame:
-        """
-        Still returns only the return prediction as 'pred_5d'.
-        Vol predictions are used only as an internal regularizer for now.
-        """
         self.model.eval()
         preds: list[float] = []
 
-        with torch.no_grad():
-            for batch in loader:
-                if not isinstance(batch, (tuple, list)) or len(batch) < 1:
-                    raise ValueError("Expected DataLoader to yield (x, ...)")
+    
+        with torch.no_grad(): 
+            for batch in loader: 
+                if not isinstance(batch, (tuple, list)) or len(batch) < 1: 
+                    raise ValueError("Expected DataLoader to yield (x, ...)") 
                 x = batch[0].to(self.device)
-                ret_pred, vol_pred = self.model(x)
-                yhat = ret_pred.detach().cpu()  # [B]
+                yhat = self.model(x).squeeze(-1).detach().cpu()
                 preds.extend(yhat.tolist())
 
         if not (len(preds) == len(dates) == len(tickers)):
@@ -155,3 +138,7 @@ class LstmModelTrainer:
             for p, d, t in zip(preds, dates, tickers)
         )
         return pd.DataFrame(rows).sort_values(["date", "ticker"]).reset_index(drop=True)
+
+    @property
+    def best_state_dict(self) -> Optional[dict]:
+        return self._best_state
