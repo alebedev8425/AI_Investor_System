@@ -124,19 +124,8 @@ python -m pip install --upgrade certifi
 
 You may see a folder name with a space in your user path (e.g., "AI_Investor_System Research"). This is fine; commands still work, but you may need to quote paths if typing manually.
 
----
 
-## 6) Configure the GUI Combo → YAML Mapping
-
-In file: `src/system/View/gui.py`  
-There is a CONFIG_MAP dictionary mapping GUI selections to YAML files in experiments/. Right now, only technical features, lstm, and softmax is implemented. For example:  
-`"technical|lstm|softmax": "experiments/exp_tech_lstm_softmax.yaml"`
-
-If you more YAMLs are added, their combos to CONFIG_MAP will be added accordingly.
-
----
-
-## 7) Launch the GUI
+## 6) Launch the GUI
 
 Using PowerShell from the repo root (MAKE SURE VENV IS ACTIVATED):
 ```bat
@@ -157,7 +146,7 @@ In the GUI:
 ---
 
 
-## 8) Outputs & Where to Find Them
+## 7) Outputs & Where to Find Them
 
 **Per-run outputs (created automatically):**
 ```
