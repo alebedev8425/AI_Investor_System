@@ -43,16 +43,14 @@ Download VS code from this link: https://code.visualstudio.com/download
 Now, open vscode, and click the 2nd icon from the right, in the top right hand corner to open the terminal.
 
 In GitHub, copy the HTTPS clone url from the big green CODE button.  
+
 Then in the terminal, type "git clone ", and paste the HTTPS clone url  
+
 Then, cd to the name of the repository cloned, it should be "AI_Investor_System"
+
 Lastly, when located in the right directory, type "code ." to open the project in a new vs code window.
 
-Tip: If your path contains spaces, quoting is fine:
-```bat
-cd "C:\Users\<you>\Documents\AI_Investor_System Research\AI_Investor_System"
-```
 
----
 
 ## 3) Create and Activate a Virtual Environment
 
