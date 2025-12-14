@@ -23,7 +23,7 @@ class SentimentConfig:
     """
 
     cache_dir: Path = Path("artifacts/external/sentiment")
-    alpha_vantage_api_key: str = "8MDC834CHK1L15Y7"
+    alpha_vantage_api_key: str = ""
     alpha_vantage_endpoint: str = "https://www.alphavantage.co/query"
     # how far back to look in days if caller doesn't slice dates tightly
     max_days: int = 30
