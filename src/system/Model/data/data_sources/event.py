@@ -16,7 +16,7 @@ import requests
 class EventConfig:
     cache_dir: Path = Path("artifacts/external/events")
     # Do NOT hardcode a key; prefer env (set ALPHAVANTAGE_API_KEY in your shell)
-    alpha_vantage_api_key: str = "8MDC834CHK1L15Y7"
+    alpha_vantage_api_key: str = ""
     alpha_vantage_endpoint: str = "https://www.alphavantage.co/query"
     api_pause: float = 12.0  # AV free tier ≈ 5 req/min. Use >=12s to be safe.
     retries: int = 2  # small retry count for throttle bursts
